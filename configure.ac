@@ -1,7 +1,8 @@
 m4_define([pkg_name],    [wireshark-plugin-dgram])
-m4_define([pkg_version], [0.0.0])
+m4_define([pkg_version], [0.1.0])
 
 AC_INIT(pkg_name, pkg_version)
+AC_CONFIG_HEADER([src/config.h])
 AC_CONFIG_SRCDIR(src/plugin.c)
 AM_INIT_AUTOMAKE
 
