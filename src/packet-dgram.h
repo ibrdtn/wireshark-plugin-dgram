@@ -8,7 +8,9 @@
 #ifndef PACKET_DGRAM_H_
 #define PACKET_DGRAM_H_
 
-void proto_init_dgram(void);
+/* Protocol Abbreviation */
+#define IEEE802154_PROTOABBREV_DGRAM     "dgram"
+
 void proto_register_dgram(void);
 void proto_reg_handoff_dgram(void);
 
