@@ -11,6 +11,5 @@
 void proto_init_dgram(void);
 void proto_register_dgram(void);
 void proto_reg_handoff_dgram(void);
-void proto_reg_handoff_dgram(void);
 
 #endif /* PACKET_DGRAM_H_ */

@@ -16,6 +16,10 @@ static int hf_dgram_pdu_type = -1;
 
 static gint ett_dgram = -1;
 
+/* Forward declaration we need below (if using proto_reg_handoff...
+   as a prefs callback)       */
+void proto_reg_handoff_dgram(void);
+
 static void dissect_dgram(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "DGRAM");
