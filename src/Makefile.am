@@ -10,6 +10,8 @@ dgram_la_SOURCES = \
 	packet-dgram-lowpan.c \
 	packet-dgram-udp.h \
 	packet-dgram-udp.c \
+	packet-dgram-beacon.h \
+	packet-dgram-beacon.c \
 	plugin.c \
 	\
 	$(NULL)
