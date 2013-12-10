@@ -16,7 +16,6 @@
 static dissector_handle_t data_handle;
 
 static int proto_dgram = -1;
-static int hf_dgram_frame_type = -1;
 static int hf_dgram_seqno = -1;
 static int hf_dgram_first_frame = -1;
 static int hf_dgram_last_frame = -1;
@@ -31,6 +30,7 @@ static const value_string frame_type_vals[] = {
 };
 
 static void        dissect_dgram            (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
+static void        dissect_dgram_fh         (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint *offset);
 static void        proto_init_dgram         (void);
 void               proto_register_dgram     (void);
 void               proto_reg_handoff_dgram  (void);
@@ -40,39 +40,71 @@ dissect_dgram(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
 	tvbuff_t *payload_tvb = NULL;
 
-	col_set_str(pinfo->cinfo, COL_PROTOCOL, "DGRAM LowPAN");
+	// set protocol name
+	col_set_str(pinfo->cinfo, COL_PROTOCOL, "LowPAN Datagram");
 
 	/* Clear out stuff in the info column */
 	col_clear(pinfo->cinfo, COL_INFO);
 
 	if (tree) { /* we are being asked for details */
-		proto_item *ti = NULL;
+		proto_item *proto_root = NULL;
 		proto_tree *dgram_tree = NULL;
 
-		ti = proto_tree_add_item(tree, proto_dgram, tvb, 0, -1, ENC_NA);
-		dgram_tree = proto_item_add_subtree(ti, ett_dgram);
+		guint offset = 0;
 
-		// type header
-		proto_tree_add_item(dgram_tree, hf_dgram_frame_type, tvb, 0, 1, ENC_NA);
+		proto_root = proto_tree_add_protocol_format(tree, proto_dgram, tvb, 0, tvb_length(tvb), "LowPAN Datagram");
+		dgram_tree = proto_item_add_subtree(proto_root, ett_dgram);
 
-		// sequence number
-		proto_tree_add_item(dgram_tree, hf_dgram_seqno, tvb, 0, 1, ENC_NA);
+		// dissect frame header
+		dissect_dgram_fh(tvb, pinfo, dgram_tree, &offset);
 
-		// first frame
-		proto_tree_add_item(dgram_tree, hf_dgram_first_frame, tvb, 0, 1, ENC_NA);
-
-		// last frame
-		proto_tree_add_item(dgram_tree, hf_dgram_last_frame, tvb, 0, 1, ENC_NA);
-
-		// info text
-		const char header = tvb_get_guint8(tvb, 0);
-		col_set_str(pinfo->cinfo, COL_INFO, val_to_str_const((header >> 4) & 0x03, frame_type_vals, "Unknown"));
-
-		payload_tvb = tvb_new_subset_remaining(tvb, 1);
+		payload_tvb = tvb_new_subset_remaining(tvb, offset);
 
 		// call data dissector with remaining data
 		call_dissector(data_handle, payload_tvb, pinfo, tree);
 	}
+}
+
+/** parse the frame header **/
+static void
+dissect_dgram_fh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint *offset)
+{
+	if (tree) { /* we are being asked for details */
+		proto_item *ti = NULL;
+		proto_tree *dgram_tree = NULL;
+
+		// get the header byte
+		const char header = tvb_get_guint8(tvb, 0);
+
+		// get frame type name as string
+		const char *type_name = val_to_str_const((header >> 4) & 0x03, frame_type_vals, "Unknown");
+
+		// set frame type name in protocol tree name
+		proto_item_append_text(tree, " %s", type_name);
+
+		// add new sub-tree
+		ti = proto_tree_add_text(tree, tvb, *offset, 1, "Frame Header: %s (0x%02x)", type_name, (header >> 4) & 0x03);
+		dgram_tree = proto_item_add_subtree(ti, ett_dgram);
+
+		// sequence number
+		proto_tree_add_item(dgram_tree, hf_dgram_seqno, tvb, *offset, 1, ENC_NA);
+
+		// first frame
+		proto_tree_add_item(dgram_tree, hf_dgram_first_frame, tvb, *offset, 1, ENC_NA);
+
+		// last frame
+		proto_tree_add_item(dgram_tree, hf_dgram_last_frame, tvb, *offset, 1, ENC_NA);
+
+		if ((header & (0x02 << 4)) && !(header & (0x01 << 4))) {
+			// beacon
+			col_set_str(pinfo->cinfo, COL_INFO, type_name);
+		} else {
+			col_add_fstr(pinfo->cinfo, COL_INFO, "%s, Seqno: %d", type_name, (header & (0x03 << 2)) >> 2);
+			proto_item_append_text(tree, ", Seqno: %d", (header & (0x03 << 2)) >> 2);
+		}
+	}
+
+	(*offset)++;
 }
 
 static gboolean
@@ -93,10 +125,6 @@ void
 proto_register_dgram(void)
 {
 	static hf_register_info hf[] = {
-		{ &hf_dgram_frame_type,
-			{ "Frame Type", "dgram.type",
-				FT_UINT8, BASE_DEC, VALS(frame_type_vals), (0x03 << 4), NULL, HFILL }
-		},
 		{ &hf_dgram_seqno,
 			{ "Sequence number", "dgram.seqno",
 				FT_UINT8, BASE_DEC, NULL, (0x03 << 2), NULL, HFILL }
