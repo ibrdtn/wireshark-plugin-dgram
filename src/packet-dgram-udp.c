@@ -234,7 +234,7 @@ proto_register_dgram_udp(void)
 
 	proto_dgram_udp = proto_register_protocol(
 		"UDP Datagram Protocol", /* name */
-		"dgram:udp", /* short name */
+		"DGRAM UDP", /* short name */
 		DGRAM_PROTOABBREV_UDP /* abbrev */
 	);
 

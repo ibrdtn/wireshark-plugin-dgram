@@ -243,7 +243,7 @@ proto_register_dgram_lowpan(void)
 
 	proto_dgram_lowpan = proto_register_protocol(
 		"LowPAN Datagram Protocol", /* name */
-		"dgram:lowpan", /* short name */
+		"DGRAM LowPAN", /* short name */
 		DGRAM_PROTOABBREV_LOWPAN /* abbrev */
 	);
 
