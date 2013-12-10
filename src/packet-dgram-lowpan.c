@@ -4,7 +4,7 @@
  *  Created on: 09.12.2013
  *      Author: Johannes Morgenroth <morgenroth@ibr.cs.tu-bs.de>
  */
-#include "packet-dgram.h"
+#include "packet-dgram-lowpan.h"
 
 #include <wireshark/config.h>
 #include <epan/packet.h>
@@ -32,10 +32,9 @@ static const value_string frame_type_vals[] = {
 static void        dissect_dgram_lowpan     (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 static void        dissect_dgram_lowpan_fh  (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint *offset);
 
-
-static void        proto_init_dgram         (void);
-void               proto_register_dgram     (void);
-void               proto_reg_handoff_dgram  (void);
+static void        proto_init_dgram_lowpan        (void);
+void               proto_register_dgram_lowpan    (void);
+void               proto_reg_handoff_dgram_lowpan (void);
 
 static void
 dissect_dgram_lowpan(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
@@ -76,7 +75,7 @@ dissect_dgram_lowpan_fh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
 		proto_tree *dgram_tree = NULL;
 
 		// get the header byte
-		const char header = tvb_get_guint8(tvb, 0);
+		const char header = tvb_get_guint8(tvb, *offset);
 
 		// get frame type name as string
 		const char *type_name = val_to_str_const((header >> 4) & 0x03, frame_type_vals, "Unknown");
@@ -124,7 +123,7 @@ dissect_dgram_lowpan_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 }
 
 void
-proto_register_dgram(void)
+proto_register_dgram_lowpan(void)
 {
 	static hf_register_info hf[] = {
 		{ &hf_dgram_lowpan_seqno,
@@ -146,23 +145,23 @@ proto_register_dgram(void)
 		&ett_dgram
 	};
 
-	register_init_routine(proto_init_dgram);
+	register_init_routine(proto_init_dgram_lowpan);
 
 	proto_dgram_lowpan = proto_register_protocol(
 		"LowPAN Datagram Protocol", /* name */
 		"dgram:lowpan", /* short name */
-		IEEE802154_PROTOABBREV_DGRAM /* abbrev */
+		DGRAM_PROTOABBREV_LOWPAN /* abbrev */
 	);
 
     proto_register_field_array(proto_dgram_lowpan, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
 
 	/*  Register dissectors with Wireshark. */
-	register_dissector(IEEE802154_PROTOABBREV_DGRAM, dissect_dgram_lowpan, proto_dgram_lowpan);
+	register_dissector(DGRAM_PROTOABBREV_LOWPAN, dissect_dgram_lowpan, proto_dgram_lowpan);
 }
 
 void
-proto_reg_handoff_dgram(void)
+proto_reg_handoff_dgram_lowpan(void)
 {
     static gboolean            prefs_initialized = FALSE;
     static dissector_handle_t  dgram_handle;
@@ -183,6 +182,6 @@ proto_reg_handoff_dgram(void)
 }
 
 static void
-proto_init_dgram(void)
+proto_init_dgram_lowpan(void)
 {
 }
