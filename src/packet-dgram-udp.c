@@ -174,7 +174,7 @@ dissect_dgram_udp_beacon(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
 				 * to add the null at the end of the string buffer.
 				 */
 				proto_tree_add_item(beacon_tree, hf_dgram_beacon_endpoint, tvb, *offset, endpoint_length, ENC_NA|ENC_ASCII);
-				(*offset) += endpoint_length + 1;
+				(*offset) += endpoint_length;
 
 			}
 		}
