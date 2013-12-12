@@ -33,11 +33,20 @@ static gint ett_dgram_beacon = -1;
 static guint dgram_udp_port = 4554;
 static guint dgram_beacon_udp_port = 5551;
 
+#define DGRAM_FRAME_BEACON 0x01
+#define DGRAM_FRAME_DATA 0x02
+#define DGRAM_FRAME_ACK 0x04
+#define DGRAM_FRAME_NACK 0x08
+
+#define DGRAM_FRAME_SEQNO_MASK 0x0f
+#define DGRAM_FRAME_FIRST_MASK 0x20
+#define DGRAM_FRAME_LAST_MASK 0x10
+
 static const value_string frame_type_vals[] = {
-    {0x02, "Data"},
-    {0x01, "Beacon"},
-    {0x04, "Ack"},
-    {0x08, "Nack"},
+    {DGRAM_FRAME_DATA, "Data"},
+    {DGRAM_FRAME_BEACON, "Beacon"},
+    {DGRAM_FRAME_ACK, "Ack"},
+    {DGRAM_FRAME_NACK, "Nack"},
     {0, NULL}
 };
 
@@ -69,13 +78,26 @@ dissect_dgram_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 		proto_root = proto_tree_add_protocol_format(tree, proto_dgram_udp, tvb, 0, tvb_length(tvb), "UDP Datagram");
 		dgram_tree = proto_item_add_subtree(proto_root, ett_dgram);
 
+		// get the type byte
+		const char type_value = tvb_get_guint8(tvb, offset);
+
 		// dissect frame header
 		dissect_dgram_udp_fh(tvb, pinfo, dgram_tree, &offset);
 
-		payload_tvb = tvb_new_subset_remaining(tvb, offset);
+		switch (type_value) {
+		case DGRAM_FRAME_BEACON:
+			// dissect beacon
+			dissect_dgram_udp_beacon(tvb, pinfo, dgram_tree, &offset);
+			break;
+		case DGRAM_FRAME_DATA:
+			payload_tvb = tvb_new_subset_remaining(tvb, offset);
 
-		// call data dissector with remaining data
-		call_dissector(data_handle, payload_tvb, pinfo, tree);
+			// call data dissector with remaining data
+			call_dissector(data_handle, payload_tvb, pinfo, tree);
+			break;
+		default:
+			break;
+		}
 	}
 }
 
@@ -92,6 +114,9 @@ dissect_dgram_udp_fh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint 
 
 		// get frame type name as string
 		const char *type_name = val_to_str_const(type_value, frame_type_vals, "Unknown");
+
+		// set column info text
+		col_set_str(pinfo->cinfo, COL_INFO, type_name);
 
 		// set frame type name in protocol tree name
 		proto_item_append_text(tree, " %s", type_name);
@@ -112,21 +137,14 @@ dissect_dgram_udp_fh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint 
 		// sequence number
 		proto_tree_add_item(dgram_tree, hf_dgram_udp_seqno, tvb, (*offset) + 1, 1, ENC_NA);
 
-		(*offset) += 2;
-
-		if (type_value == 0x01) {
-			// beacon
-			col_set_str(pinfo->cinfo, COL_INFO, type_name);
-
-			// dissect beacon
-			dissect_dgram_udp_beacon(tvb, pinfo, tree, offset);
-		} else {
-			col_add_fstr(pinfo->cinfo, COL_INFO, "%s, Seqno: %d", type_name, flags_seqno & 0x0f);
+		if (type_value != DGRAM_FRAME_BEACON) {
+			col_append_fstr(pinfo->cinfo, COL_INFO, ", Seqno: %d", flags_seqno & 0x0f);
 			proto_item_append_text(tree, ", Seqno: %d", flags_seqno & 0x0f);
 		}
-	} else {
-		(*offset) += 2;
 	}
+
+	// move offset ahead of the header
+	(*offset) += 2;
 }
 
 /** parse the beacon frame **/
@@ -135,6 +153,7 @@ dissect_dgram_udp_beacon(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
 {
 	int         sdnv_length;
 	int         endpoint_length;
+	guint8      flags;
 
 	if (tree) { /* we are being asked for details */
 		proto_item *ti = NULL;
@@ -146,17 +165,23 @@ dissect_dgram_udp_beacon(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
 
 		// version
 		proto_tree_add_item(beacon_tree, hf_dgram_beacon_version, tvb, *offset, 1, ENC_BIG_ENDIAN);
+
+		// move offset pointer to the flags
 		(*offset)++;
 
 		// flags
-		const guint8 flags = tvb_get_guint8(tvb, *offset);
+		flags = tvb_get_guint8(tvb, *offset);
 		proto_tree_add_item(beacon_tree, hf_dgram_beacon_contains_eid, tvb, *offset, 1, ENC_BIG_ENDIAN);
 		proto_tree_add_item(beacon_tree, hf_dgram_beacon_contains_service_block, tvb, *offset, 1, ENC_BIG_ENDIAN);
 		proto_tree_add_item(beacon_tree, hf_dgram_beacon_contains_bloomfilter, tvb, *offset, 1, ENC_BIG_ENDIAN);
+
+		// move offset pointer to the sequence number
 		(*offset)++;
 
 		// sequence number
 		proto_tree_add_item(beacon_tree, hf_dgram_beacon_sn, tvb, *offset, 2, ENC_BIG_ENDIAN);
+
+		// move offset pointer ahead of the static header
 		(*offset) += 2;
 
 		// decode EID if present
@@ -166,8 +191,8 @@ dissect_dgram_udp_beacon(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
 			(*offset) += sdnv_length;
 
 			if (endpoint_length > 0) {
-				// set info text
-				col_add_fstr(pinfo->cinfo, COL_INFO, "Beacon, Endpoint: %s", tvb_get_string(tvb, *offset, endpoint_length));
+				// add endpoint to info text
+				col_append_fstr(pinfo->cinfo, COL_INFO, ", Endpoint: %s", tvb_get_string(tvb, *offset, endpoint_length));
 
 				/*
 				 * Endpoint name may not be null terminated. This routine is supposed
@@ -175,7 +200,6 @@ dissect_dgram_udp_beacon(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
 				 */
 				proto_tree_add_item(beacon_tree, hf_dgram_beacon_endpoint, tvb, *offset, endpoint_length, ENC_NA|ENC_ASCII);
 				(*offset) += endpoint_length;
-
 			}
 		}
 	}
@@ -187,15 +211,15 @@ proto_register_dgram_udp(void)
 	static hf_register_info hf[] = {
 		{ &hf_dgram_udp_first_frame,
 			{ "First Frame", "dgram.first",
-				FT_BOOLEAN, 8, NULL, 0x20, NULL, HFILL }
+				FT_BOOLEAN, 8, NULL, DGRAM_FRAME_FIRST_MASK, NULL, HFILL }
 		},
 		{ &hf_dgram_udp_last_frame,
 			{ "Last Frame", "dgram.last",
-				FT_BOOLEAN, 8, NULL, 0x10, NULL, HFILL }
+				FT_BOOLEAN, 8, NULL, DGRAM_FRAME_LAST_MASK, NULL, HFILL }
 		},
 		{ &hf_dgram_udp_seqno,
 			{ "Sequence number", "dgram.seqno",
-				FT_UINT8, BASE_DEC, NULL, 0x0f, NULL, HFILL }
+				FT_UINT8, BASE_DEC, NULL, DGRAM_FRAME_SEQNO_MASK, NULL, HFILL }
 		},
 		{ &hf_dgram_beacon_version,
 			{ "Version", "dgram.beacon.version",
