@@ -5,7 +5,6 @@
  *      Author: Johannes Morgenroth <morgenroth@ibr.cs.tu-bs.de>
  */
 #include "packet-dgram-lowpan.h"
-#include "packet-dgram-beacon.h"
 
 #include <wireshark/config.h>
 #include <epan/packet.h>
@@ -14,22 +13,15 @@
 #include <epan/dissectors/packet-ieee802154.h>
 
 static dissector_handle_t data_handle;
+static dissector_handle_t ipnd_handle;
 
 static int proto_dgram_lowpan = -1;
 static int hf_dgram_lowpan_seqno = -1;
 static int hf_dgram_lowpan_first_frame = -1;
 static int hf_dgram_lowpan_last_frame = -1;
 
-static int hf_dgram_beacon_version = -1;
-static int hf_dgram_beacon_contains_eid = -1;
-static int hf_dgram_beacon_contains_service_block = -1;
-static int hf_dgram_beacon_contains_bloomfilter = -1;
-static int hf_dgram_beacon_sn = -1;
-static int hf_dgram_beacon_endpoint = -1;
-
 static gint ett_dgram = -1;
 static gint ett_dgram_frame = -1;
-static gint ett_dgram_beacon = -1;
 
 #define DGRAM_FRAME_BEACON 0x02
 #define DGRAM_FRAME_DATA 0x01
@@ -51,7 +43,6 @@ static const value_string frame_type_vals[] = {
 
 static void        dissect_dgram_lowpan     (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 static void        dissect_dgram_lowpan_fh  (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint *offset);
-static void        dissect_dgram_lowpan_beacon(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint *offset);
 
 static void        proto_init_dgram_lowpan        (void);
 void               proto_register_dgram_lowpan    (void);
@@ -86,7 +77,10 @@ dissect_dgram_lowpan(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 		switch (type_value & DGRAM_FRAME_TYPE_MASK) {
 		case DGRAM_FRAME_BEACON << 4:
 			// dissect beacon
-			dissect_dgram_lowpan_beacon(tvb, pinfo, dgram_tree, &offset);
+			payload_tvb = tvb_new_subset_remaining(tvb, offset);
+
+			// call data dissector with remaining data
+			call_dissector(ipnd_handle, payload_tvb, pinfo, tree);
 			break;
 		case DGRAM_FRAME_DATA << 4:
 			payload_tvb = tvb_new_subset_remaining(tvb, offset);
@@ -143,65 +137,6 @@ dissect_dgram_lowpan_fh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
 	(*offset)++;
 }
 
-/** parse the beacon frame **/
-static void
-dissect_dgram_lowpan_beacon(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint *offset)
-{
-	int         sdnv_length;
-	int         endpoint_length;
-	guint8      flags;
-
-	if (tree) { /* we are being asked for details */
-		proto_item *ti = NULL;
-		proto_tree *beacon_tree = NULL;
-
-		// add new sub-tree
-		ti = proto_tree_add_text(tree, tvb, *offset, -1, "Neighbor Discovery Beacon");
-		beacon_tree = proto_item_add_subtree(ti, ett_dgram_beacon);
-
-		// version
-		proto_tree_add_item(beacon_tree, hf_dgram_beacon_version, tvb, *offset, 1, ENC_BIG_ENDIAN);
-
-		// move offset pointer to the flags
-		(*offset)++;
-
-		// flags
-		flags = tvb_get_guint8(tvb, *offset);
-		proto_tree_add_item(beacon_tree, hf_dgram_beacon_contains_eid, tvb, *offset, 1, ENC_BIG_ENDIAN);
-		proto_tree_add_item(beacon_tree, hf_dgram_beacon_contains_service_block, tvb, *offset, 1, ENC_BIG_ENDIAN);
-		proto_tree_add_item(beacon_tree, hf_dgram_beacon_contains_bloomfilter, tvb, *offset, 1, ENC_BIG_ENDIAN);
-
-		// move offset pointer to the sequence number
-		(*offset)++;
-
-		// sequence number
-		proto_tree_add_item(beacon_tree, hf_dgram_beacon_sn, tvb, *offset, 2, ENC_BIG_ENDIAN);
-
-		// move offset pointer ahead of the static header
-		(*offset) += 2;
-
-		// decode EID if present
-		if (flags & BEACON_CONTAINS_EID)
-		{
-			endpoint_length = evaluate_sdnv(tvb, *offset, &sdnv_length);
-			(*offset) += sdnv_length;
-
-			if (endpoint_length > 0) {
-				// add endpoint to info text
-				col_append_fstr(pinfo->cinfo, COL_INFO, ", Endpoint: %s", tvb_get_string(tvb, *offset, endpoint_length));
-
-				/*
-				 * Endpoint name may not be null terminated. This routine is supposed
-				 * to add the null at the end of the string buffer.
-				 */
-				proto_tree_add_item(beacon_tree, hf_dgram_beacon_endpoint, tvb, *offset, endpoint_length, ENC_NA|ENC_ASCII);
-				(*offset) += endpoint_length;
-
-			}
-		}
-	}
-}
-
 static gboolean
 dissect_dgram_lowpan_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
@@ -231,30 +166,6 @@ proto_register_dgram_lowpan(void)
 		{ &hf_dgram_lowpan_last_frame,
 			{ "Last Frame", "dgram.last",
 				FT_BOOLEAN, 8, NULL, DGRAM_FRAME_LAST_MASK, NULL, HFILL }
-		},
-		{ &hf_dgram_beacon_version,
-			{ "Version", "dgram.beacon.version",
-				FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL }
-		},
-		{&hf_dgram_beacon_contains_eid,
-			{"Contains Endpoint ID", "dgram.beacon.contains_eid",
-				 FT_BOOLEAN, 8, NULL, BEACON_CONTAINS_EID, NULL, HFILL}
-		},
-		{&hf_dgram_beacon_contains_service_block,
-			{"Contains Service Block", "dgram.beacon.contains_service_block",
-				FT_BOOLEAN, 8, NULL, BEACON_CONTAINS_SERVICE_BLOCK, NULL, HFILL}
-		},
-		{&hf_dgram_beacon_contains_bloomfilter,
-			{"Contains Bloom Filter", "dgram.beacon.contains_bloomfilter",
-				 FT_BOOLEAN, 8, NULL, BEACON_CONTAINS_BLOOMFILTER, NULL, HFILL}
-		},
-		{ &hf_dgram_beacon_sn,
-			{ "Sequence number", "dgram.beacon.sn",
-				FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }
-		},
-		{ &hf_dgram_beacon_endpoint,
-			{ "Endpoint", "dgram.beacon.endpoint",
-				FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL }
 		}
 	};
 
@@ -262,7 +173,6 @@ proto_register_dgram_lowpan(void)
 	static gint *ett[] = {
 		&ett_dgram,
 		&ett_dgram_frame,
-		&ett_dgram_beacon,
 	};
 
 	register_init_routine(proto_init_dgram_lowpan);
@@ -291,6 +201,7 @@ proto_reg_handoff_dgram_lowpan(void)
 		/* Get the dissector handles. */
 		dgram_handle   = create_dissector_handle(dissect_dgram_lowpan, proto_dgram_lowpan);
 		data_handle    = find_dissector("data");
+		ipnd_handle    = find_dissector("ipnd");
 		prefs_initialized = TRUE;
 	} else {
 		// Nothing to deregister.
