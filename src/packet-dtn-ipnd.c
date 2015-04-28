@@ -8,6 +8,7 @@
 #include "packet-dtn-ipnd.h"
 
 #include <wireshark/config.h>
+#include <epan/wmem/wmem.h>
 #include <epan/packet.h>
 #include <glib.h>
 
@@ -83,7 +84,7 @@ dissect_dtn_ipnd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 
 			if (endpoint_length > 0) {
 				// add endpoint to info text
-				col_append_fstr(pinfo->cinfo, COL_INFO, ", Endpoint: %s", tvb_get_string(tvb, offset, endpoint_length));
+				col_append_fstr(pinfo->cinfo, COL_INFO, ", Endpoint: %s", tvb_get_string_enc(wmem_packet_scope(),tvb, offset, endpoint_length,ENC_ASCII));
 
 				/*
 				 * Endpoint name may not be null terminated. This routine is supposed
