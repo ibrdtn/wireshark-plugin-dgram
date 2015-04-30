@@ -96,7 +96,7 @@ dissect_dtn_ipnd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 				 * Endpoint name may not be null terminated. This routine is supposed
 				 * to add the null at the end of the string buffer.
 				 */
-				proto_tree_add_item(ipnd_tree, hf_dtn_ipnd_endpoint, tvb, offset, endpoint_length, ENC_NA|ENC_ASCII);
+				proto_tree_add_item(ipnd_tree, hf_dtn_ipnd_endpoint, tvb, offset, endpoint_length, 0);
 				offset += endpoint_length;
 			}
 		}
