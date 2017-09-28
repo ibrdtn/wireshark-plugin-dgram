@@ -66,7 +66,7 @@ dissect_dgram_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 
 		guint offset = 0;
 
-		proto_root = proto_tree_add_protocol_format(tree, proto_dgram_udp, tvb, 0, tvb_length(tvb), "UDP Datagram");
+		proto_root = proto_tree_add_protocol_format(tree, proto_dgram_udp, tvb, 0, tvb_captured_length(tvb), "UDP Datagram");
 		dgram_tree = proto_item_add_subtree(proto_root, ett_dgram);
 
 		// get the type byte
@@ -116,8 +116,7 @@ dissect_dgram_udp_fh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint 
 		proto_item_append_text(tree, " %s", type_name);
 
 		// add new sub-tree
-		ti = proto_tree_add_text(tree, tvb, *offset, 1, "Frame Header: %s (0x%02x)", type_name, type_value);
-		dgram_tree = proto_item_add_subtree(ti, ett_dgram_frame);
+		dgram_tree = proto_tree_add_subtree_format(tree, tvb, *offset, 1, ett_dgram_frame, &ti, "Frame Header: %s (0x%02x)", type_name, type_value);
 
 		// get the flags/seqno byte
 		const char flags_seqno = tvb_get_guint8(tvb, (*offset) + 1);

@@ -54,8 +54,7 @@ dissect_dtn_ipnd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 		offset = 0;
 
 		// add new sub-tree
-		ti = proto_tree_add_text(tree, tvb, offset, -1, "IP Neighbor Discovery Beacon");
-		ipnd_tree = proto_item_add_subtree(ti, ett_dtn_ipnd);
+		ipnd_tree = proto_tree_add_subtree_format(tree, tvb, offset, -1, ett_dtn_ipnd, &ti, "IP Neighbor Discovery Beacon");
 
 		// version
 		proto_tree_add_item(ipnd_tree, hf_dtn_ipnd_version, tvb, offset, 1, ENC_BIG_ENDIAN);
