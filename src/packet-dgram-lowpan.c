@@ -65,7 +65,7 @@ dissect_dgram_lowpan(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 
 		guint offset = 0;
 
-		proto_root = proto_tree_add_protocol_format(tree, proto_dgram_lowpan, tvb, 0, tvb_length(tvb), "LowPAN Datagram");
+		proto_root = proto_tree_add_protocol_format(tree, proto_dgram_lowpan, tvb, 0, tvb_captured_length(tvb), "LowPAN Datagram");
 		dgram_tree = proto_item_add_subtree(proto_root, ett_dgram);
 
 		// get the type byte
@@ -115,8 +115,7 @@ dissect_dgram_lowpan_fh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gui
 		proto_item_append_text(tree, " %s", type_name);
 
 		// add new sub-tree
-		ti = proto_tree_add_text(tree, tvb, *offset, 1, "Frame Header: %s (0x%02x)", type_name, (header >> 4) & 0x03);
-		dgram_tree = proto_item_add_subtree(ti, ett_dgram_frame);
+		dgram_tree = proto_tree_add_subtree_format(tree, tvb, *offset, 1, ett_dgram_frame, &ti, "Frame Header: %s (0x%02x)", type_name, (header >> 4) & 0x03);
 
 		// sequence number
 		proto_tree_add_item(dgram_tree, hf_dgram_lowpan_seqno, tvb, *offset, 1, ENC_NA);
@@ -209,7 +208,7 @@ proto_reg_handoff_dgram_lowpan(void)
 	}
 
 	/* Register our dissector with IEEE 802.15.4 */
-	heur_dissector_add(IEEE802154_PROTOABBREV_WPAN, dissect_dgram_lowpan_heur, proto_dgram_lowpan);
+	heur_dissector_add(IEEE802154_PROTOABBREV_WPAN, dissect_dgram_lowpan_heur, "IPND over WPAN", "ipnd_wpan", proto_dgram_lowpan, HEURISTIC_ENABLE);
 }
 
 static void

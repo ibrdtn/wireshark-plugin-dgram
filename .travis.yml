@@ -2,7 +2,7 @@ language: c
 compiler:
   - gcc
 before_install:
-  - sudo apt-get update
+  - sudo add-apt-repository ppa:wireshark-dev/stable -y && sudo apt-get update
 install:
   - sudo apt-get -y install build-essential autoconf pkg-config libtool libglib2.0-dev libwireshark-dev libwiretap-dev
 script:
